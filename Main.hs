@@ -13,7 +13,7 @@ import Data.Functor.Foldable.TH
 
 data Tree a 
   = Leaf a 
-  | Node {
+  | Branch {
       value :: a,
       up :: Tree a,
       down :: Tree a
@@ -23,7 +23,7 @@ makeBaseFunctor ''Tree
 
 data Claim = Call | Put
 
-data Acc = Acc {
+data Seed = Seed {
     s :: Double,
     t :: Double
   }
@@ -37,19 +37,21 @@ main = do
       t_T = 1.0
       american = False
 
-      δt = 0.25
+      δt = 0.25 -- consider providing n = T/δt instead
       u = 1.1
       v = 0.9
       p' = 0.5 + r * sqrt(δt) / 2.0 / σ
       disc = 1.0 / (1.0 + r * δt)
+      payoff s Call = max 0.0 $ s - k
+      payoff s Put = max 0.0 $ k - s
   putStrLn "Pricing ... "
-  let π = ana g $ Acc s 0.0 :: Tree Double -- Very weird that I have to provide sig here.
-          where g :: Acc -> Base (Tree Double) Acc
-                g (Acc s t) | t > t_T = error "δt must divide equally into T"
-                g (Acc s t) | t < t_T = 
-                  NodeF 
-                    s 
-                    Acc {s = u * s, t = t + δt} 
-                    Acc {s = v * s, t = t + δt}
-                g (Acc s t) | t == t_T = LeafF s
+  let π = ana g $ Seed s 0.0 :: Tree Double -- Very weird that I have to provide sig here.
+          where g :: Seed -> Base (Tree Double) Seed
+                g (Seed s t) | t > t_T = error "δt must divide equally into T"
+                g (Seed s t) | t < t_T = 
+                  BranchF 
+                    (payoff s claim)
+                    Seed {s = u * s, t = t + δt} 
+                    Seed {s = v * s, t = t + δt}
+                g (Seed s t) | t == t_T = LeafF s
   putStrLn . show $ π
