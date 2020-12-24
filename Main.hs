@@ -24,8 +24,6 @@ data Tree a
 
 makeBaseFunctor ''Tree
 
-data Claim = Call | Put
-
 data Params 
   = Params {
     s_0 :: Double,
