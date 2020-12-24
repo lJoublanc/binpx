@@ -34,7 +34,8 @@ data Params
     t_T :: Double,
     u :: Double,
     v :: Double,
-    payoff :: Params -> Seed -> Double
+    payoff :: Params -> Seed -> Double,
+    american :: Bool
   }
 
 data Seed = Seed {
@@ -53,7 +54,8 @@ main = do
     t_T = 1.0,
     u = 1.1,
     v = 0.9,
-    payoff = \Params{k} Seed{s} -> max 0.0 (s - k)
+    payoff = \Params{k} Seed{s} -> max 0.0 (k - s),
+    american = True
   }
 
 -- Calculte price using binary tree. TODO: This is ineffective as n² calculations are done.
@@ -70,7 +72,7 @@ price θ@Params{..} = hylo calcPrice calcPayoff $ Seed s_0 0.0
 
         calcPrice :: Base (Tree Double) Double ->  Double
         calcPrice (LeafF payoff) = payoff
-        calcPrice (BranchF _ up down) = π up down -- this is surprising: price doesn't depend on payoff at t < T.
+        calcPrice (BranchF payoff up down) = max (π up down) (if american then payoff else 0) -- this is surprising: price doesn't depend on payoff at t < T.
         π up down = disc * (p' * up + (1.0 - p') * down)
         p' = 0.5 + r * sqrt(δt) / 2.0 / σ
         disc = 1.0 / (1.0 + r * δt)
