@@ -13,6 +13,8 @@ module Main where
 import Data.Functor.Foldable
 import Data.Functor.Foldable.TH
 import GHC.Float (int2Double)
+import Control.Comonad.Cofree (Cofree)
+import Control.Comonad (Comonad, Comonad(..))
 
 data Tree a 
   = Leaf a 
@@ -20,7 +22,12 @@ data Tree a
       value :: a,
       up :: Tree a,
       down :: Tree a
-    } deriving Show
+    } deriving (Show, Functor)
+
+instance Comonad Tree where
+  extract (Leaf a) = a
+  extract (Branch a _ _) = a
+  duplicate x = Leaf x
 
 makeBaseFunctor ''Tree
 
@@ -46,31 +53,33 @@ data Seed = Seed {
   
 main = do
   putStrLn "Pricing ... "
-  let π = price Params {
-            s_0 = 100.0,
-            σ = 0.2,
-            r = 0.05,
-            k = 100.0,
-            n = 4,
-            t_T = 1.0,
-            u = 1.1,
-            v = 0.9,
-            payoff = \Params{k} Seed{s} -> max 0.0 (s - k)
-          }
-  putStrLn . show $ π
+  putStrLn . show . price $ Params {
+    s_0 = 100.0,
+    σ = 0.2,
+    r = 0.05,
+    k = 100.0,
+    n = 4,
+    t_T = 1.0,
+    u = 1.1,
+    v = 0.9,
+    payoff = \Params{k} Seed{s} -> max 0.0 (s - k)
+  }
 
-price :: Params -> Tree Double
-price θ@Params{..} = ana g $ Seed s_0 0.0
-  where g :: Seed -> Base (Tree Double) Seed
-        g Seed{t}        | t > t_T = error "δt must divide equally into T"
-        g θ_t@Seed{s, t} | t < t_T = 
+price :: Params -> Double
+price θ@Params{..} = histo calcPrice . (ana calcPayoff :: Seed -> Tree Double) $ Seed s_0 0.0
+  where calcPayoff :: Seed -> Base (Tree Double) Seed
+        calcPayoff Seed{t}        | t > t_T = error "δt must divide equally into T"
+        calcPayoff θ_t@Seed{s, t} | t < t_T = 
           BranchF 
-            (payoff θ θ_t)
+            (payoff θ θ_t) --(π (u * s) (v * s))
             Seed {s = u * s, t = t + δt}
             Seed {s = v * s, t = t + δt}
-        g θ_t@Seed{s, t} | t == t_T = LeafF (payoff θ θ_t)
+        calcPayoff θ_t@Seed{s, t} | t == t_T = LeafF (payoff θ θ_t)
 
-        δt = t_T / int2Double n
+        calcPrice :: Base (Tree Double) (Cofree (Base (Tree Double)) Double) ->  Double
+        calcPrice (LeafF payoff) = payoff
+        calcPrice (BranchF _ up down) = π (extract up) (extract down) -- this is surprising: price doesn't depend on payoff at t < T.
+        π π_up π_down = disc * (p' * π_up + (1.0 - p') * π_down)
         p' = 0.5 + r * sqrt(δt) / 2.0 / σ
         disc = 1.0 / (1.0 + r * δt)
-
+        δt = t_T / int2Double n
