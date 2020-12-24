@@ -11,15 +11,15 @@ module Main where
 import Data.Functor.Foldable
 import Data.Functor.Foldable.TH
 
-data BinTree a 
+data Tree a 
   = Leaf a 
   | Node {
       value :: a,
-      up :: BinTree a,
-      down :: BinTree a
+      up :: Tree a,
+      down :: Tree a
     } deriving Show
 
-makeBaseFunctor ''BinTree
+makeBaseFunctor ''Tree
 
 data Claim = Call | Put
 
@@ -38,10 +38,9 @@ main = do
       p' = 0.5 + r * sqrt(δt) / 2.0 / σ
       disc = 1.0 / (1.0 + r * δt)
   putStrLn "Pricing ... "
-  let π = ana g (100.0, 0.0) :: BinTree Double
-          where g :: (Double, Double) -> Base (BinTree Double) (Double, Double)
+  let π = ana g (100.0, 0.0) :: Tree Double
+          where g :: (Double, Double) -> Base (Tree Double) (Double, Double)
                 g (s, t) | t > t_T = error "δt must divide equally into T"
                 g (s, t) | t < t_T = NodeF s (u * s, t + δt) (v * s, t + δt)
                 g (s, t) | t == t_T = LeafF s
   putStrLn . show $ π
-  -- putStrLn $ "Price is " <> (show . iter value $ π)
