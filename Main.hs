@@ -23,6 +23,11 @@ makeBaseFunctor ''Tree
 
 data Claim = Call | Put
 
+data Acc = Acc {
+    s :: Double,
+    t :: Double
+  }
+
 main = do
   let s = 100.0
       σ = 0.2
@@ -38,9 +43,13 @@ main = do
       p' = 0.5 + r * sqrt(δt) / 2.0 / σ
       disc = 1.0 / (1.0 + r * δt)
   putStrLn "Pricing ... "
-  let π = ana g (100.0, 0.0) :: Tree Double
-          where g :: (Double, Double) -> Base (Tree Double) (Double, Double)
-                g (s, t) | t > t_T = error "δt must divide equally into T"
-                g (s, t) | t < t_T = NodeF s (u * s, t + δt) (v * s, t + δt)
-                g (s, t) | t == t_T = LeafF s
+  let π = ana g $ Acc s 0.0 :: Tree Double -- Very weird that I have to provide sig here.
+          where g :: Acc -> Base (Tree Double) Acc
+                g (Acc s t) | t > t_T = error "δt must divide equally into T"
+                g (Acc s t) | t < t_T = 
+                  NodeF 
+                    s 
+                    Acc {s = u * s, t = t + δt} 
+                    Acc {s = v * s, t = t + δt}
+                g (Acc s t) | t == t_T = LeafF s
   putStrLn . show $ π
