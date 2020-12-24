@@ -4,12 +4,15 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE RecordWildCards #-}
 
 -- Example of pricing using the Binomial theorem
 module Main where
 
 import Data.Functor.Foldable
 import Data.Functor.Foldable.TH
+import GHC.Float (int2Double)
 
 data Tree a 
   = Leaf a 
@@ -23,35 +26,51 @@ makeBaseFunctor ''Tree
 
 data Claim = Call | Put
 
-data Seed = Seed {
-    s :: Double,
-    t :: Double
+data Params 
+  = Params {
+    s_0 :: Double,
+    σ :: Double,
+    r :: Double,
+    k :: Double,
+    n :: Int, -- used to calc δt
+    t_T :: Double,
+    u :: Double,
+    v :: Double,
+    payoff :: Params -> Seed -> Double
   }
 
+data Seed = Seed {
+  s :: Double,
+  t :: Double
+}
+  
 main = do
-  let s = 100.0
-      σ = 0.2
-      r = 0.05
-      k = 100.0
-      claim = Call
-      t_T = 1.0
-      american = False
-
-      δt = 0.25 -- consider providing n = T/δt instead
-      u = 1.1
-      v = 0.9
-      p' = 0.5 + r * sqrt(δt) / 2.0 / σ
-      disc = 1.0 / (1.0 + r * δt)
-      payoff s Call = max 0.0 $ s - k
-      payoff s Put = max 0.0 $ k - s
   putStrLn "Pricing ... "
-  let π = ana g $ Seed s 0.0 :: Tree Double -- Very weird that I have to provide sig here.
-          where g :: Seed -> Base (Tree Double) Seed
-                g (Seed s t) | t > t_T = error "δt must divide equally into T"
-                g (Seed s t) | t < t_T = 
-                  BranchF 
-                    (payoff s claim)
-                    Seed {s = u * s, t = t + δt} 
-                    Seed {s = v * s, t = t + δt}
-                g (Seed s t) | t == t_T = LeafF s
+  let π = price Params {
+            s_0 = 100.0,
+            σ = 0.2,
+            r = 0.05,
+            k = 100.0,
+            n = 4,
+            t_T = 1.0,
+            u = 1.1,
+            v = 0.9,
+            payoff = \Params{k} Seed{s} -> max 0.0 (s - k)
+          }
   putStrLn . show $ π
+
+price :: Params -> Tree Double
+price θ@Params{..} = ana g $ Seed s_0 0.0
+  where g :: Seed -> Base (Tree Double) Seed
+        g Seed{t}        | t > t_T = error "δt must divide equally into T"
+        g θ_t@Seed{s, t} | t < t_T = 
+          BranchF 
+            (payoff θ θ_t)
+            Seed {s = u * s, t = t + δt}
+            Seed {s = v * s, t = t + δt}
+        g θ_t@Seed{s, t} | t == t_T = LeafF (payoff θ θ_t)
+
+        δt = t_T / int2Double n
+        p' = 0.5 + r * sqrt(δt) / 2.0 / σ
+        disc = 1.0 / (1.0 + r * δt)
+
